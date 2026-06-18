@@ -1,0 +1,4 @@
+interface:
+  display_name: "Shared Claude Bridge"
+  short_description: "Talk to Claude through a visible in-app shared terminal bridge."
+  default_prompt: "Use $shared-claude-bridge to show the local Claude bridge in the Codex in-app Browser side panel, then send this message to Claude."
