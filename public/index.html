@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared Claude Terminal</title>
+  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f3ea;
+      --panel: #f3f1e7;
+      --panel-2: #fffdf8;
+      --line: #d8d4c4;
+      --text: #233128;
+      --muted: #6d786f;
+      --green: #5e9560;
+      --amber: #c38d39;
+      --red: #cc675d;
+      --steel: #5f8ca1;
+      --shadow: rgba(55, 66, 58, 0.12);
+      --terminal-scrollbar-gutter: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(62, 77, 67, 0.045) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(62, 77, 67, 0.03) 1px, transparent 1px),
+        radial-gradient(circle at 12% 0%, rgba(94, 149, 96, 0.16), transparent 30rem),
+        radial-gradient(circle at 88% 4%, rgba(195, 141, 57, 0.14), transparent 28rem),
+        var(--bg);
+      background-size: 28px 28px, 28px 28px, auto, auto, auto;
+      color: var(--text);
+      font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      overflow: hidden;
+    }
+
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-width: 320px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(248, 247, 241, 0.92);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 28px var(--shadow);
+    }
+
+    .identity {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      background: var(--amber);
+      box-shadow: 0 0 14px currentColor;
+      color: var(--amber);
+    }
+
+    .status-dot.live {
+      background: var(--green);
+      color: var(--green);
+    }
+
+    .status-dot.dead {
+      background: var(--red);
+      color: var(--red);
+    }
+
+    .meta {
+      min-width: 0;
+      display: flex;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .meta span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .session-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .model-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .session-picker,
+    .model-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      height: 30px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+    }
+
+    .session-picker strong,
+    .model-picker strong {
+      font-size: 11px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    select {
+      height: 22px;
+      min-width: 240px;
+      max-width: min(44vw, 380px);
+      border: 1px solid #c8c4b3;
+      border-radius: 4px;
+      background: #fffef9;
+      color: var(--text);
+      font: inherit;
+      font-size: 11px;
+      padding: 0 8px;
+      outline: none;
+    }
+
+    select:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    #modelSelect {
+      min-width: 210px;
+      max-width: min(32vw, 320px);
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      height: 30px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle:hover {
+      border-color: var(--steel);
+      background: #f1eee2;
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .toggle-copy strong,
+    .toggle-copy span {
+      white-space: nowrap;
+    }
+
+    .toggle-copy strong {
+      font-weight: 700;
+    }
+
+    .toggle-copy span {
+      color: var(--muted);
+    }
+
+    .switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: #cdd4c7;
+      flex: 0 0 auto;
+      transition: background 120ms ease;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f7faf4;
+      transition: transform 120ms ease;
+    }
+
+    .toggle input:checked + .switch {
+      background: #4f8f3a;
+    }
+
+    .toggle input:checked + .switch::after {
+      transform: translateX(16px);
+    }
+
+    .toggle input:disabled + .switch {
+      opacity: 0.65;
+    }
+
+    button {
+      appearance: none;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      height: 30px;
+      min-width: 38px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 11px;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      border-color: var(--steel);
+      background: #f1eee2;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button.warn:hover {
+      border-color: var(--red);
+    }
+
+    main {
+      min-height: 0;
+      padding: 12px;
+      display: grid;
+    }
+
+    .terminal-frame {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffdf8;
+      box-shadow: 0 20px 42px var(--shadow);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 1fr;
+    }
+
+    #terminal {
+      min-width: 0;
+      min-height: 0;
+      padding: 10px;
+    }
+
+    .xterm {
+      height: 100%;
+    }
+
+    .xterm-viewport {
+      overflow-y: scroll;
+      scrollbar-color: #b9c1b1 #f3f0e5;
+      scrollbar-width: thin;
+    }
+
+    .xterm-viewport::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+
+    .xterm-viewport::-webkit-scrollbar-track {
+      background: #f3f0e5;
+    }
+
+    .xterm-viewport::-webkit-scrollbar-thumb {
+      background: #b9c1b1;
+      border: 2px solid #f3f0e5;
+      border-radius: 999px;
+    }
+
+    .xterm-viewport::-webkit-scrollbar-thumb:hover {
+      background: #98a18f;
+    }
+
+    .xterm-screen {
+      clip-path: inset(0 var(--terminal-scrollbar-gutter) 0 0);
+    }
+
+    @media (max-width: 720px) {
+      header {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+    .toolbar {
+        justify-content: flex-start;
+      }
+
+      .session-controls {
+        width: 100%;
+      }
+
+      .model-controls {
+        width: 100%;
+      }
+
+      .session-picker,
+      .model-picker {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      select {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+      }
+
+      #modelSelect {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+      }
+
+      .meta {
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      button {
+        height: 30px;
+        padding: 0 9px;
+      }
+
+      main {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="identity">
+      <div class="title-row">
+        <span id="statusDot" class="status-dot" aria-hidden="true"></span>
+        <h1 id="title">Shared Claude Terminal</h1>
+      </div>
+      <div class="meta">
+        <span id="cwd">cwd: ...</span>
+        <span id="pid">pid: ...</span>
+        <span id="command">cmd: claude</span>
+      </div>
+    </div>
+    <div class="toolbar" aria-label="Terminal controls">
+      <div class="session-controls" aria-label="Claude session picker">
+        <label class="session-picker" title="Pick a saved Claude conversation for this folder">
+          <strong>Session</strong>
+          <select id="sessionSelect" aria-label="Choose Claude chat history">
+            <option value="">New conversation</option>
+          </select>
+        </label>
+        <button type="button" id="sessionNew" title="Restart Claude as a new conversation">New</button>
+        <button type="button" id="sessionOpen" title="Restart Claude into the selected conversation">Open</button>
+        <button type="button" id="sessionDelete" class="warn" title="Delete the selected saved conversation">Delete</button>
+        <button type="button" id="sessionRefresh" title="Reload available Claude sessions">Reload</button>
+      </div>
+      <label class="toggle" title="Switching this restarts the Claude process">
+        <span class="toggle-copy">
+          <strong>History</strong>
+          <span id="persistLabel">On</span>
+        </span>
+        <input id="persistToggle" type="checkbox" checked aria-label="Keep Claude chat history">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="model-controls" aria-label="Claude model controls">
+        <label class="model-picker" title="Pick a built-in Claude model command">
+          <strong>Model</strong>
+          <select id="modelSelect" aria-label="Choose Claude model">
+            <option value="">Default (Claude Code)</option>
+          </select>
+        </label>
+        <button type="button" id="modelApply" title="Send the selected /model command to Claude">Use</button>
+        <button type="button" id="modelPicker" title="Open Claude Code built-in model picker">Menu</button>
+      </div>
+      <button type="button" id="effortPicker" title="Open Claude Code reasoning effort picker">Effort</button>
+      <button type="button" data-key="Enter" title="Enter">Enter</button>
+      <button type="button" data-key="Ctrl+C" title="Ctrl+C">Ctrl+C</button>
+      <button type="button" data-key="Escape" title="Escape">Esc</button>
+      <button type="button" id="clear" title="Clear local terminal view">Clear</button>
+      <button type="button" id="restart" class="warn" title="Restart Claude process">Restart</button>
+    </div>
+  </header>
+  <main>
+    <section class="terminal-frame" aria-label="Claude terminal">
+      <div id="terminal"></div>
+    </section>
+  </main>
+
+  <script src="/vendor/xterm/lib/xterm.js"></script>
+  <script src="/vendor/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script>
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: '"Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace',
+      fontSize: 13,
+      lineHeight: 1.18,
+      letterSpacing: 0,
+      scrollback: 5000,
+      scrollOnUserInput: false,
+      theme: {
+        background: '#fffdf8',
+        foreground: '#223128',
+        cursor: '#c38d39',
+        selectionBackground: '#d7e5d2',
+        black: '#243128',
+        red: '#c45d57',
+        green: '#5e9560',
+        yellow: '#b98735',
+        blue: '#5f8ca1',
+        magenta: '#b26db8',
+        cyan: '#4e9a96',
+        white: '#e8e4d6',
+        brightBlack: '#6f786f',
+        brightRed: '#dc7d74',
+        brightGreen: '#7ab07c',
+        brightYellow: '#d6a65b',
+        brightBlue: '#7ea5b5',
+        brightMagenta: '#ca8bcd',
+        brightCyan: '#71b7b4',
+        brightWhite: '#ffffff'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+
+    let socket;
+    let connected = false;
+    let persistSession = true;
+    let persistMutationInFlight = false;
+    let resumeSessionId = null;
+    let activeSessionId = null;
+    let activeModel = '';
+    let models = [];
+    let modelCommandInFlight = false;
+    let sessions = [];
+    const persistToggle = document.getElementById('persistToggle');
+    const persistLabel = document.getElementById('persistLabel');
+    const sessionSelect = document.getElementById('sessionSelect');
+    const sessionNew = document.getElementById('sessionNew');
+    const sessionOpen = document.getElementById('sessionOpen');
+    const sessionDelete = document.getElementById('sessionDelete');
+    const sessionRefresh = document.getElementById('sessionRefresh');
+    const modelSelect = document.getElementById('modelSelect');
+    const modelApply = document.getElementById('modelApply');
+    const modelPicker = document.getElementById('modelPicker');
+    const effortPicker = document.getElementById('effortPicker');
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      socket.addEventListener('open', () => {
+        connected = true;
+        setStatusClass('live');
+        fitAndSendSize();
+      });
+
+      socket.addEventListener('message', (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'reset') {
+          term.reset();
+        }
+        if (payload.type === 'output') {
+          term.write(payload.data);
+        }
+        if (payload.type === 'status') {
+          renderStatus(payload.data);
+        }
+      });
+
+      socket.addEventListener('close', () => {
+        connected = false;
+        setStatusClass('dead');
+        setTimeout(connect, 900);
+      });
+    }
+
+    term.onData((data) => {
+      if (connected) {
+        socket.send(JSON.stringify({ type: 'input', data }));
+      }
+    });
+
+    term.onResize((size) => {
+      if (connected) {
+        socket.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+      }
+    });
+
+    document.querySelectorAll('[data-key]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        await fetch('/api/key', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: button.dataset.key })
+        });
+        term.focus();
+      });
+    });
+
+    document.getElementById('clear').addEventListener('click', () => {
+      term.clear();
+      term.focus();
+    });
+
+    document.getElementById('restart').addEventListener('click', async () => {
+      if (!confirm('Restart Claude process?')) return;
+      await fetch('/api/restart', { method: 'POST' });
+      setTimeout(refreshSessions, 1200);
+      term.focus();
+    });
+
+    modelApply.addEventListener('click', async () => {
+      const nextModel = modelSelect.value || '';
+      const selectedOption = modelSelect.selectedOptions[0];
+      const selectedLabel = selectedOption ? selectedOption.textContent : (nextModel || 'Default');
+
+      if (nextModel === (activeModel || '')) {
+        term.focus();
+        return;
+      }
+
+      modelCommandInFlight = true;
+      setModelControlsDisabled(true);
+      try {
+        const response = await fetch('/api/model', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: nextModel || null })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not switch model.');
+        }
+        activeModel = payload.model || activeModel || '';
+        renderStatus(payload.status);
+      } catch (error) {
+        alert(error.message || `Could not send model command for ${selectedLabel}.`);
+      } finally {
+        setTimeout(() => {
+          modelCommandInFlight = false;
+          setModelControlsDisabled(false);
+          term.focus();
+        }, 300);
+      }
+    });
+
+    modelPicker.addEventListener('click', async () => {
+      modelPicker.disabled = true;
+      try {
+        await fetch('/api/input', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: '/model\r' })
+        });
+      } catch (_) {
+        alert('Could not open Claude model picker.');
+      } finally {
+        setTimeout(() => {
+          modelPicker.disabled = false;
+          term.focus();
+        }, 300);
+      }
+    });
+
+    effortPicker.addEventListener('click', async () => {
+      effortPicker.disabled = true;
+      try {
+        await fetch('/api/input', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: '/effort\r' })
+        });
+      } catch (_) {
+        alert('Could not open Claude effort picker.');
+      } finally {
+        setTimeout(() => {
+          effortPicker.disabled = false;
+          term.focus();
+        }, 300);
+      }
+    });
+
+    persistToggle.addEventListener('change', async () => {
+      const nextValue = persistToggle.checked;
+      const prompt = nextValue
+        ? 'Restart Claude and keep chat history on disk?'
+        : 'Restart Claude without saving chat history?';
+
+      if (!confirm(prompt)) {
+        persistToggle.checked = persistSession;
+        return;
+      }
+
+      persistMutationInFlight = true;
+      persistToggle.disabled = true;
+      persistLabel.textContent = nextValue ? 'On...' : 'Off...';
+
+      try {
+        const response = await fetch('/api/restart', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ persistSession: nextValue })
+        });
+        const payload = await response.json();
+        renderStatus(payload.status);
+        setTimeout(refreshSessions, 1500);
+      } catch (_) {
+        persistToggle.checked = persistSession;
+        updatePersistUi();
+      } finally {
+        persistMutationInFlight = false;
+        persistToggle.disabled = false;
+        term.focus();
+      }
+    });
+
+    sessionOpen.addEventListener('click', async () => {
+      const nextSessionId = sessionSelect.value || null;
+      const currentSessionId = activeSessionId || resumeSessionId || null;
+      const isNewConversation = !nextSessionId;
+      const prompt = isNewConversation
+        ? 'Restart Claude as a new conversation for this folder?'
+        : 'Restart Claude into the selected saved conversation?';
+
+      if (!persistSession) {
+        alert('Turn History on before choosing a saved Claude conversation.');
+        return;
+      }
+
+      if (nextSessionId === currentSessionId && currentSessionId) {
+        term.focus();
+        return;
+      }
+
+      if (isNewConversation && !currentSessionId) {
+        term.focus();
+        return;
+      }
+
+      if (!confirm(prompt)) {
+        syncSessionSelection();
+        return;
+      }
+
+      sessionOpen.disabled = true;
+      sessionRefresh.disabled = true;
+      sessionSelect.disabled = true;
+
+      try {
+        const response = await fetch('/api/restart', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ resumeSessionId: nextSessionId })
+        });
+        const payload = await response.json();
+        renderStatus(payload.status);
+        setTimeout(refreshSessions, 1600);
+      } finally {
+        setTimeout(() => {
+          sessionOpen.disabled = false;
+          sessionRefresh.disabled = false;
+          applySessionControlState();
+          term.focus();
+        }, 500);
+      }
+    });
+
+    sessionNew.addEventListener('click', async () => {
+      const currentSessionId = activeSessionId || resumeSessionId || null;
+      const prompt = persistSession
+        ? 'Restart Claude as a new conversation for this folder?'
+        : 'Restart the temporary Claude session as a fresh new conversation?';
+
+      if (!currentSessionId && !termHasVisibleConversation()) {
+        term.focus();
+        return;
+      }
+
+      if (!confirm(prompt)) {
+        term.focus();
+        return;
+      }
+
+      sessionNew.disabled = true;
+      sessionOpen.disabled = true;
+      sessionDelete.disabled = true;
+      sessionRefresh.disabled = true;
+      sessionSelect.disabled = true;
+
+      try {
+        const response = await fetch('/api/restart', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ resumeSessionId: null })
+        });
+        const payload = await response.json();
+        renderStatus(payload.status);
+        setTimeout(refreshSessions, 1600);
+      } finally {
+        setTimeout(() => {
+          applySessionControlState();
+          term.focus();
+        }, 500);
+      }
+    });
+
+    sessionDelete.addEventListener('click', async () => {
+      const targetSessionId = sessionSelect.value || null;
+      const currentSessionId = activeSessionId || resumeSessionId || null;
+      const isCurrent = Boolean(targetSessionId && currentSessionId && targetSessionId === currentSessionId);
+
+      if (!persistSession) {
+        alert('Turn History on before deleting a saved Claude conversation.');
+        return;
+      }
+
+      if (!targetSessionId) {
+        alert('Pick a saved conversation first.');
+        return;
+      }
+
+      const prompt = isCurrent
+        ? 'Delete the selected saved conversation? Claude will restart as a new conversation.'
+        : 'Delete the selected saved conversation?';
+
+      if (!confirm(prompt)) {
+        term.focus();
+        return;
+      }
+
+      sessionDelete.disabled = true;
+      sessionNew.disabled = true;
+      sessionOpen.disabled = true;
+      sessionRefresh.disabled = true;
+      sessionSelect.disabled = true;
+
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}`, {
+          method: 'DELETE'
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Delete failed');
+        }
+
+        if (payload.status) {
+          renderStatus(payload.status);
+        }
+
+        if (payload.sessions && Array.isArray(payload.sessions.sessions)) {
+          sessions = payload.sessions.sessions;
+          activeSessionId = payload.sessions.activeSessionId || null;
+          renderSessionOptions();
+        } else {
+          setTimeout(refreshSessions, 1200);
+        }
+      } catch (error) {
+        alert(error.message || 'Delete failed.');
+      } finally {
+        setTimeout(() => {
+          applySessionControlState();
+          term.focus();
+        }, 500);
+      }
+    });
+
+    sessionRefresh.addEventListener('click', async () => {
+      await refreshSessions();
+      term.focus();
+    });
+
+    sessionSelect.addEventListener('change', () => {
+      applySessionControlState();
+    });
+
+    modelSelect.addEventListener('change', () => {
+      applyModelControlState();
+    });
+
+    window.addEventListener('resize', debounce(fitAndSendSize, 80));
+
+    setInterval(async () => {
+      try {
+        const response = await fetch('/api/status');
+        renderStatus(await response.json());
+      } catch (_) {
+        setStatusClass('dead');
+      }
+    }, 2000);
+
+    requestAnimationFrame(() => {
+      fitAndSendSize();
+      term.focus();
+      connect();
+      refreshSessions();
+      refreshModels();
+    });
+
+    function fitAndSendSize() {
+      fitAddon.fit();
+      const size = { cols: term.cols, rows: term.rows };
+      if (connected) {
+        socket.send(JSON.stringify({ type: 'resize', ...size }));
+      }
+    }
+
+    function renderStatus(status) {
+      setStatusClass(status.alive ? 'live' : 'dead');
+      persistSession = status.persistSession !== false;
+      resumeSessionId = status.resumeSessionId || null;
+      activeModel = status.model || '';
+      document.getElementById('cwd').textContent = `cwd: ${status.cwd}`;
+      document.getElementById('pid').textContent = `pid: ${status.pid || '-'}`;
+      document.getElementById('command').textContent = `cmd: ${status.commandLine}`;
+      updatePersistUi();
+      syncModelSelection();
+      applySessionControlState();
+    }
+
+    function setStatusClass(name) {
+      const dot = document.getElementById('statusDot');
+      dot.classList.toggle('live', name === 'live');
+      dot.classList.toggle('dead', name === 'dead');
+    }
+
+    function updatePersistUi() {
+      if (!persistMutationInFlight) {
+        persistToggle.checked = persistSession;
+      }
+      persistLabel.textContent = persistSession ? 'On' : 'Off';
+      applySessionControlState();
+    }
+
+    async function refreshSessions() {
+      try {
+        const response = await fetch('/api/sessions');
+        const payload = await response.json();
+        sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+        activeSessionId = payload.activeSessionId || null;
+        renderSessionOptions();
+      } catch (_) {
+        sessions = [];
+        activeSessionId = null;
+        renderSessionOptions();
+      }
+    }
+
+    async function refreshModels() {
+      modelCommandInFlight = true;
+      setModelControlsDisabled(true);
+
+      try {
+        const response = await fetch('/api/models');
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not load models.');
+        }
+
+        models = Array.isArray(payload.models) ? payload.models : [];
+        activeModel = payload.selectedModel || activeModel || '';
+        renderModelOptions();
+      } catch (error) {
+        console.warn(error.message || 'Model load failed');
+      } finally {
+        modelCommandInFlight = false;
+        setModelControlsDisabled(false);
+      }
+    }
+
+    function renderModelOptions() {
+      const desiredValue = modelSelect.value || activeModel || '';
+      modelSelect.innerHTML = '';
+
+      for (const model of models) {
+        const option = document.createElement('option');
+        option.value = model.id || '';
+        option.textContent = formatModelLabel(model);
+        option.title = formatModelTitle(model);
+        modelSelect.appendChild(option);
+      }
+
+      if (!models.some((model) => (model.id || '') === '')) {
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Default (Claude Code)';
+        modelSelect.prepend(defaultOption);
+      }
+
+      modelSelect.value = models.some((model) => (model.id || '') === desiredValue) ? desiredValue : '';
+      syncModelSelection();
+    }
+
+    function formatModelLabel(model) {
+      const idSuffix = model.id ? ` (${model.id})` : '';
+      return `${model.label || model.id || 'Default'}${idSuffix}`;
+    }
+
+    function formatModelTitle(model) {
+      return model.detail || 'Built-in Claude model command';
+    }
+
+    function syncModelSelection() {
+      if (!modelSelect.matches(':focus')) {
+        const preferred = activeModel || '';
+        if ([...modelSelect.options].some((option) => option.value === preferred)) {
+          modelSelect.value = preferred;
+        }
+      }
+      applyModelControlState();
+    }
+
+    function setModelControlsDisabled(disabled) {
+      if (disabled) {
+        modelSelect.disabled = true;
+        modelApply.disabled = true;
+        modelPicker.disabled = true;
+        return;
+      }
+
+      applyModelControlState();
+    }
+
+    function renderSessionOptions() {
+      const desiredValue = sessionSelect.value || activeSessionId || resumeSessionId || '';
+      sessionSelect.innerHTML = '';
+
+      const newOption = document.createElement('option');
+      newOption.value = '';
+      newOption.textContent = 'New conversation';
+      sessionSelect.appendChild(newOption);
+
+      for (const session of sessions) {
+        const option = document.createElement('option');
+        option.value = session.id;
+        option.textContent = formatSessionLabel(session);
+        sessionSelect.appendChild(option);
+      }
+
+      sessionSelect.value = sessions.some((session) => session.id === desiredValue) ? desiredValue : '';
+      syncSessionSelection();
+      applySessionControlState();
+    }
+
+    function formatSessionLabel(session) {
+      const date = new Date(session.updatedAt);
+      const stamp = Number.isNaN(date.getTime())
+        ? session.updatedAt
+        : date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const topic = session.firstUserText || session.lastUserText || 'Empty conversation';
+      return `${stamp} | ${topic}`;
+    }
+
+    function syncSessionSelection() {
+      const preferred = activeSessionId || resumeSessionId || '';
+      if (!sessionSelect.matches(':focus')) {
+        sessionSelect.value = sessions.some((session) => session.id === preferred) ? preferred : '';
+      }
+    }
+
+    function applySessionControlState() {
+      const enableHistorySessions = persistSession && !persistMutationInFlight;
+      const selectedSavedSession = Boolean(sessionSelect.value);
+      sessionSelect.disabled = !enableHistorySessions;
+      sessionOpen.disabled = !enableHistorySessions || !selectedSavedSession;
+      sessionDelete.disabled = !enableHistorySessions || !selectedSavedSession;
+      sessionNew.disabled = persistMutationInFlight;
+      sessionRefresh.disabled = persistMutationInFlight;
+    }
+
+    function applyModelControlState() {
+      const hasModels = modelSelect.options.length > 0;
+      modelSelect.disabled = modelCommandInFlight || !hasModels;
+      modelPicker.disabled = modelCommandInFlight;
+      modelApply.disabled = modelCommandInFlight || !hasModels || (modelSelect.value || '') === (activeModel || '');
+    }
+
+    function termHasVisibleConversation() {
+      return Boolean(document.querySelector('.xterm-rows')?.textContent?.trim());
+    }
+
+    function debounce(fn, wait) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), wait);
+      };
+    }
+  </script>
+</body>
+</html>

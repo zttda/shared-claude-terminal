@@ -1,0 +1,20 @@
+{
+  "name": "shared-claude-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local shared browser terminal bridge for Claude Code.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "start:remote": "node server.js --remote-control",
+    "start:ephemeral": "node server.js --no-session-persistence"
+  },
+  "dependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "0.13.1",
+    "express": "^4.21.2",
+    "ws": "^8.18.3",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  }
+}

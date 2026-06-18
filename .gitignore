@@ -1,0 +1,7 @@
+node_modules/
+server.log
+server.err.log
+server.pid
+.DS_Store
+Thumbs.db
+shared-claude-terminal-delivery.zip
